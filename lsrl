@@ -1,14 +1,30 @@
 
 float[] lsrl(float x[], float y[],int size)
 {
-  float b = 0;
-  float d = 0;
+  float b = 0.0;
+  float d = 0.0;
   for(int i = 0;i < size;i++)
   {
     b += x[i];
     d += x[i] * x[i];
   }
-
+  float det = 1;
+  float a = size;
+  det /= (a * d - b * b);
+  swap(a, d);
+  a *= det;
+  b *= -1;
+  b *= det;
+  d *= det;
+  
+  float b = 0.0;
+  float d = 0.0;
+  for(int i = 0;i < size;i++)
+  {
+    b += x[i];
+    d += x[i] * x[i];
+  }
+  
 
 
 }
