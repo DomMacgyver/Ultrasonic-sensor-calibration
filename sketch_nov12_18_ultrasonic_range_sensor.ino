@@ -1,100 +1,111 @@
-#include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
-#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
-#include <SPI.h>
 
-
-// For the breakout, you can use any 2 or 3 pins
-// These pins will also work for the 1.8" TFT shield
-#define TFT_CS     10
-#define TFT_RST    9  // you can also connect this to the Arduino reset
-// in which case, set this #define pin to -1!
-#define TFT_DC     8
-
-// Option 1 (recommended): must use the hardware SPI pins
-// (for UNO thats sclk = 13 and sid = 11) and pin 10 must be
-// an output. This is much faster - also required if you want
-// to use the microSD card (see the image drawing example)
-
-// For 1.44" and 1.8" TFT with ST7735 use
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS,  TFT_DC, TFT_RST);
-
-// For 1.54" TFT with ST7789
-//Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS,  TFT_DC, TFT_RST);
-
-// Option 2: use any pins but a little slower!
-//#define TFT_SCLK 13   // set these to be whatever pins you like!
-//#define TFT_MOSI 11   // set these to be whatever pins you like!
-//Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
-
+#include "Functions.h"
 int row;
 int x;
-int length;
-char* str;
-float p = 3.1415926;
-const int del = 5000;
+
+const unsigned int size = 5;// number of data points that will be collected
+const unsigned int sample_size = 10; //then umber of samples to take for each average; larger numbers for more accuracy, smaller numbers for faster run times
 const unsigned int TRIG_PIN = 7;
 const unsigned int ECHO_PIN = 6;
 char receivedChar;
-boolean newData = false;
-const float line_space = 2.0*0.714375;
 
-float darr[16];
-float val[16];
-float total;
-int num;
+// if you have already determined the offset, set calibration to true and set the offset to that value(man_offset: where it was measure, calibration_offset: what the difference in measurments was)
+bool calibration = true;
+double man_offset = 0.0;// how far away the senosr will be from the wall when measuring since ultrasonic senors cannot get a reading at point blank range, units in cm
+double calibration_offset = 0.0;//in cm
+
+const double interval = 2.0; // the distance between each measurement
+
+//initilaize arrays
+double darr[size];// array of pre-measured distances
+double val[size];// array of average distance values from the sensor
+unsigned long durations[size]; //array of average durations, in ms
+
+//hard coded values for testing
+//double darr[] = {5.0, 7.0, 9.0, 11.0, 13.0};
+//double val[] = {4.2024, 5.6089, 7.9931, 9.9485, 11.8182};
+//unsigned long durations[] = {3311, 11013, 13102, 21010, 22301};
 
 void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   Serial.begin(9600);
-  Serial.print("Hello! ST77xx TFT Test");
-
-  // Use this initializer if you're using a 1.8" TFTs
-
-  //tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
-
-  // Use this initializer (uncomment) if you're using a 1.44" TFT
-  tft.initR(INITR_144GREENTAB);   // initialize a ST7735S chip, green tab
-
-  // Use this initializer (uncomment) if you're using a 0.96" 180x60 TFT
-  //tft.initR(INITR_MINI160x80);   // initialize a ST7735S chip, mini display
-
-  // Use this initializer (uncomment) if you're using a 1.54" 240x240 TFT
-  //tft.init(240, 240);   // initialize a ST7789 chip, 240x240 pixels
-
   Serial.println("Initialized");
 
-  uint16_t time = millis();
-  tft.fillScreen(ST77XX_BLACK);
-  time = millis() - time;
-
-  Serial.println(time, DEC);
   delay(500);
 }
 
-void loop() {
-  for (int line = 2; line < 16; line++)
+double offset_calibrate()
+{
+  double distance;
+  while (Serial.available() == 0)//exit the loop when the user enters the distance into the serial monitor
   {
-    while (!newData)
+    //trigger the ultrasonic sensor
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+
+    //recive duration from the sensor
+    const unsigned long duration = pulseIn(ECHO_PIN, HIGH);
+    distance = duration * 1.0  / 29.15 / 2.0; // calculate the distance in cm: formula: time / speed of sound in cm / 2 because sound travels there and back
+    Serial.println(distance, 5);//print the distance
+    delay(20);
+  }
+  double offset = Serial.parseFloat();
+  calibration_offset = offset - distance; //set the value to what the user entered - distance computed
+  Serial.println(calibration_offset, 5); // print the calibration offset to 5 decimal places
+  calibration = false;// exits the loop
+  return offset;
+}
+
+void array_initialize(double start, double step, int size)
+{
+  for (int i = 0; i < size; i++)
+  {
+    darr[i] = start + step * i;
+  }
+}
+
+
+void loop() {
+
+  //calibrate the front offset
+  while (calibration)
+  {
+    man_offset = offset_calibrate();
+  }
+  array_initialize(man_offset, interval, size);// initialize the array of pre-measured distances
+
+
+
+  for (int position = 0; position < size; position++)
+  {
+    bool newData = false;
+    Serial.println("Waiting for input to advance");
+    Serial.println("Current measurment distance is ");
+    Serial.println(darr[position], 5);
+    while (!newData)//wait for user to enter 'a' into the serial monitor before running for this distance; done for each distance measurment
     {
       if (Serial.available() > 0)
       {
         receivedChar = Serial.read();
-        if(receivedChar == 'a')
+        if (receivedChar == 'a')
         {
-        newData = true;
-        receivedChar = ' ';
+          newData = true;
+          receivedChar = ' ';
         }
       }
     }
-    total = 0;
-    newData = false;
-    darr[line - 2] = line * 1.0 * line_space;
-    Serial.println("Ready");
-    delay(3000);
+
+    unsigned long total = 0;
+
+    Serial.println("Ready");//acnowledeges that input has been recieved
+    delay(1000);
     Serial.println("Go");
-    for (num = 1; num < 20; num++)
+
+    for (int num = 0; num < sample_size; num++)
     {
       digitalWrite(TRIG_PIN, LOW);
       delayMicroseconds(2);
@@ -102,32 +113,54 @@ void loop() {
       delayMicroseconds(10);
       digitalWrite(TRIG_PIN, LOW);
       const unsigned long duration = pulseIn(ECHO_PIN, HIGH);
-      //Serial.println(duration);
-      float distance = duration*1.0  / 29.15 / 2.0;
-      Serial.println(distance, 5);
-      if (distance <= 0.1)
+      //double distance = calibration_offset + duration * 1.0  / 29.15 / 2.0;
+
+      // Serial.println(distance, 5);
+      if (duration <= 1 || duration >= 200000)
       {
-        num -= 1;
+        num -= 1;//don't count this run if the value doesn't make sense
       }
       else
       {
-        Serial.println(num, DEC);
-        total += distance;
-        delay(200);
+        Serial.println(num, DEC);//print the current iterarion
+        total += duration;// add the duration to the total
+        delay(20);
       }
-      //delay(100);
     }
     Serial.println("Done");
-    val[line - 2] = total / num * 1.0;
+
+    double average = total / sample_size * 1.0;// compute the average
+    durations[position] = average;// add this average durtion to the array
+    double distance = average / 29.15 / 2.0;//calculate the predicted distance
+    val[position] = distance; // stire the predicted distance to the array
   }
+
+  //print the data (to 4 decimal places) as three(3) columns (measured on left, sensor in the middle, and durations on right) sperated by commas
   Serial.println();
-  for (int count = 0; count < 14; count++)
+  for (int count = 0; count < size; count++)
   {
-    Serial.print(darr[count], 3);
+    Serial.print(darr[count], 4);
     Serial.print(", ");
-    Serial.print(val[count], 3);
+    Serial.print(val[count], 4);
+    Serial.print(", ");
+    Serial.print(durations[count], 4);
     Serial.println();
   }
+  // Serial.println(calibration_offset, 5); // print the calibration offset to 5 decimal places
+  //helpful site for viewing: http://www.alcula.com/calculators/statistics/scatter-plot/
+
+
+  double line_vals[3];
+  lsrl(darr, val, size, line_vals);
+  Serial.println();//print a space
+
+  //print the least squares regression line coefficents and correlation coefficent (R Squared), to 7 decimal places
+  Serial.print("A0: ");
+  Serial.print(line_vals[0], 7);
+  Serial.print(", A1: ");
+  Serial.print(line_vals[1], 7);
+  Serial.print(", R Squared: ");
+  Serial.print(line_vals[2], 7);
+  Serial.println();
   delay(50000);
 }
-
