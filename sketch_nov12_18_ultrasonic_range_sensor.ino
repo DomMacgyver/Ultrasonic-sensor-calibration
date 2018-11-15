@@ -4,7 +4,7 @@ int row;
 int x;
 
 const unsigned int size = 8;// number of data points that will be collected
-const unsigned int sample_size = 10; //then umber of samples to take for each average; larger numbers for more accuracy, smaller numbers for faster run times
+const unsigned int sample_size = 10; //the number of samples to take for each average; larger numbers for more accuracy, smaller numbers for faster run times
 const unsigned int TRIG_PIN = 7;
 const unsigned int ECHO_PIN = 6;
 char receivedChar;
@@ -14,7 +14,7 @@ bool calibration = true;
 double man_offset = 0.0;// how far away the senosr will be from the wall when measuring since ultrasonic senors cannot get a reading at point blank range, units in cm
 double calibration_offset = 0.0;//in cm
 
-const double interval = 1.5; // the distance between each measurement
+const double interval = 1.5; // the distance(cm) between each measurement
 
 //initialize arrays
 
@@ -32,26 +32,24 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   Serial.begin(9600);
-  Serial.println("Initialized");
+  Serial.println("Initialized"); //comment out this line if you are going to use the seril plotter
 
   delay(500);
+  if(calibration)
+  {
+     array_initialize(man_offset, interval, size);// initialize the array of pre-measured distances
+    
+  }
 }
 
 double offset_calibrate()
 {
-  double distance;
+  double distance = 0.0;
   while (Serial.available() == 0)//exit the loop when the user enters the distance into the serial monitor
   {
-    //trigger the ultrasonic sensor
-    digitalWrite(TRIG_PIN, LOW);
-    delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-
-    //recive duration from the sensor
-    const unsigned long duration = pulseIn(ECHO_PIN, HIGH);
+    const unsigned long duration = analog_read();
     distance = duration / 2.0 * 0.0342 + 1.101; // calculate the distance in cm: formula: time / 2 because sound travels there and back * the slope of the line + the intercept
+    
     Serial.println(distance, 5);//print the distance
     delay(20);
   }
@@ -73,12 +71,8 @@ void array_initialize(double start, double step, int size)
 
 void loop() {
 
-  //calibrate the front offset
-  while (calibration)
-  {
-    man_offset = offset_calibrate();
-  }
-  array_initialize(man_offset, interval, size);// initialize the array of pre-measured distances
+ 
+ 
 
 
 
@@ -107,7 +101,7 @@ void loop() {
     delay(1000);
     Serial.println("Go");
 
-    for (int num = 0; num < sample_size; num++)
+    for (unsigned int num = 0; num < sample_size; num++)
     {
       digitalWrite(TRIG_PIN, LOW);
       delayMicroseconds(2);
@@ -138,7 +132,7 @@ void loop() {
 
   //print the data (to 5 decimal places) as three(3) columns (measured on left, sensor in the middle, and durations on right) sperated by commas
   Serial.println();
-  for (int count = 0; count < size; count++)
+  for (unsigned int count = 0; count < size; count++)
   {
     Serial.print(darr[count], 3);
     Serial.print(", ");
