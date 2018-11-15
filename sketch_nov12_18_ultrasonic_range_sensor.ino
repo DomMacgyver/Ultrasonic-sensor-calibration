@@ -1,86 +1,61 @@
-
 #include "Functions.h"
 int row;
 int x;
 
-const unsigned int size = 8;// number of data points that will be collected
-const unsigned int sample_size = 10; //the number of samples to take for each average; larger numbers for more accuracy, smaller numbers for faster run times
 const unsigned int TRIG_PIN = 7;
 const unsigned int ECHO_PIN = 6;
 char receivedChar;
 
-// if you have already determined the offset, set calibration to true and set the offset to that value(man_offset: where it was measure, calibration_offset: what the difference in measurments was)
-bool calibration = true;
-double man_offset = 0.0;// how far away the senosr will be from the wall when measuring since ultrasonic senors cannot get a reading at point blank range, units in cm
-double calibration_offset = 0.0;//in cm
+// calibration
+// If you have already determined the coefficents for the duration to distance equation, set calibration to false and set the coeffiecnmts to that value
+bool calibration = false;//if this is false you canm declare offset and slope as const
+//the equation: y = mx + b, distance = slope * durtion + offset
+double offset = 1.101;//the intercept from the least squares regression analysis
+double slope = 0.0342 / 2.0;//the slope from the least squares regression analysis, divided by 2.0 because the duration is to the object and back but distance to the object would only be time to get there or back.
 
-const double interval = 1.5; // the distance(cm) between each measurement
 
-//initialize arrays
 
-double darr[size];// array of pre-measured distances
-double val[size];// array of average distance values from the sensor
-double durations[size]; //array of average durations, in ms
+//functions
 
-//hard coded values for testing
-/*
-  double darr[] = {5.0, 7.0, 9.0, 11.0, 13.0};
-  double val[] = {4.2024, 5.6089, 7.9931, 9.9485, 11.8182};
-  double durations[] = {1655.5, 5506.5, 6551, 10505, 11150.5};
-*/
-void setup() {
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  Serial.begin(9600);
-  Serial.println("Initialized"); //comment out this line if you are going to use the seril plotter
+unsigned long analog_read()//fucntion to read in vlues from the ultrasonic sensor, if you are using a different sensor than the HY-SRF05 sensor, replace what is in this function
+{
+  //trigger the ultrasonic sensor
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
 
-  delay(500);
-  if(calibration)
-  {
-     array_initialize(man_offset, interval, size);// initialize the array of pre-measured distances
-    
-  }
+  //recive duration from the sensor
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH);
+  return duration;
 }
 
-double offset_calibrate()
+void calibrate(double start, double step, unsigned int size, unsigned int sample_size)
 {
-  double distance = 0.0;
-  while (Serial.available() == 0)//exit the loop when the user enters the distance into the serial monitor
-  {
-    const unsigned long duration = analog_read();
-    distance = duration / 2.0 * 0.0342 + 1.101; // calculate the distance in cm: formula: time / 2 because sound travels there and back * the slope of the line + the intercept
-    
-    Serial.println(distance, 5);//print the distance
-    delay(20);
-  }
-  double offset = Serial.parseFloat();
-  calibration_offset = offset - distance; //set the value to what the user entered - distance computed
-  Serial.println(calibration_offset, 5); // print the calibration offset to 5 decimal places
-  calibration = false;// exits the loop
-  return offset;
-}
+  //initialize arrays
+  double darr[size];// array of pre-measured distances
+  double val[size];// array of average distance values from the sensor
+  double durations[size]; //array of average durations, in ms
 
-void array_initialize(double start, double step, int size)
-{
-  for (int i = 0; i < size; i++)
+  // initialize the array of pre-measured distances
+  for (unsigned int i = 0; i < size; i++)
   {
     darr[i] = start + step * i;
   }
-}
 
+  //hard coded values for testing
+  /*
+    double darr[] = {5.0, 7.0, 9.0, 11.0, 13.0};
+    double val[] = {4.2024, 5.6089, 7.9931, 9.9485, 11.8182};
+    double durations[] = {1655.5, 5506.5, 6551, 10505, 11150.5};
+  */
 
-void loop() {
-
- 
- 
-
-
-
-  for (int position = 0; position < size; position++)
+  for (unsigned int position = 0; position < size; position++)
   {
-    bool newData = false;
+    bool newData = false;//reset newData flag
     Serial.println("Waiting for input to advance");
-    Serial.println("Current measurment distance is ");
+    Serial.println("Next measurment distance is ");
     Serial.println(darr[position], 5);
     while (!newData)//wait for user to enter 'a' into the serial monitor before running for this distance; done for each distance measurment
     {
@@ -95,21 +70,18 @@ void loop() {
       }
     }
 
-    unsigned long total = 0;
+    unsigned long total = 0;//initialize total
 
     Serial.println("Ready");//acknowledges that input has been recieved
     delay(1000);
     Serial.println("Go");
 
+    //takes an average of the values collected for this measurment distance
     for (unsigned int num = 0; num < sample_size; num++)
     {
-      digitalWrite(TRIG_PIN, LOW);
-      delayMicroseconds(2);
-      digitalWrite(TRIG_PIN, HIGH);
-      delayMicroseconds(10);
-      digitalWrite(TRIG_PIN, LOW);
-      unsigned long duration = pulseIn(ECHO_PIN, HIGH);
-      duration /= 2;
+
+      unsigned long duration = analog_read();
+      duration /= 2; //divided by 2 because the duration is to the object and back but distance to the object would only be time to get there or back.
 
       if (duration <= 1 || duration >= 200000)
       {
@@ -142,7 +114,7 @@ void loop() {
     Serial.println();
   }
   //helpful site for viewing: http://www.alcula.com/calculators/statistics/scatter-plot/
-
+  //values can be broken up by pasting into excel and using the text splitter
 
   double line_vals[3];
   lsrl(durations, darr, size, line_vals);
@@ -164,5 +136,39 @@ void loop() {
   Serial.print(" + ");
   Serial.print(line_vals[0], 4);
   Serial.println();
-  delay(50000);
+  offset = line_vals[0];
+  slope = line_vals[1];
+}
+
+//end functions
+void setup() {
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  Serial.begin(9600);
+  Serial.println("Initialized"); //comment out this line if you are going to use the seril plotter
+
+  delay(500);
+  if (calibration)
+  {
+
+    //if coefficents have not been determined, set these values
+    const double start = 4.0; //distance to start the interval from
+    const double interval = 1.5; // the distance(cm) between each measurement
+    const unsigned int size = 8;// number of data points that will be collected for calibration
+    const unsigned int sample_size = 10; //the number of samples to take for each average; larger numbers for more accuracy, smaller numbers for faster run times
+
+    calibrate(start, interval, size, sample_size);
+
+  }
+}
+
+
+
+void loop() {
+
+  unsigned long duration = analog_read();
+  double distance = slope * duration + offset;//compute distance
+  Serial.println(distance, 5); //print distacne to 5 decimal places
+
+  delay(50);
 }
