@@ -43,15 +43,12 @@ void lsrl(double x[], double y[],int dim, double values[])
     val -= y[i];
     val *= val;
     error += val;
-    val = y[i];
-    val -= y_mean;
+    
+    val = y[i] - y_mean;
     val *= val;
     sst += val;
   }
-  double r = error;
-  r /= sst;
-  r *= -1;
-  r += 1;
+  double r = 1 - (error / sst);
 
   values[0] = b0;
   values[1] = b1;
