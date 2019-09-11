@@ -50,9 +50,9 @@ void lsrl(double x[], double y[], int dim, double values[])
   }
   double r = 1 - (error / sst);
 
-  values[0] = b0;
-  values[1] = b1;
-  values[2] = r;
+  values[0] = b0; //offset
+  values[1] = b1; //slope
+  values[2] = r; //correlation value
 
 }
 
